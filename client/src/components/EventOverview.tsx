@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Button, Paper, List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Dialog, DialogTitle, DialogContent, Alert } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -27,16 +27,12 @@ const EventOverview: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
-
   const getAuthHeader = () => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       const response = await axios.get('/api/events', {
         headers: getAuthHeader()
@@ -52,7 +48,11 @@ const EventOverview: React.FC = () => {
       console.error('Error fetching events:', error);
       setError('Failed to fetch events');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
   const handleCreateEvent = async (eventData: any) => {
     try {

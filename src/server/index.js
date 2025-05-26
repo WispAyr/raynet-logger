@@ -48,7 +48,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/raynet-lo
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/events', eventRoutes);
+app.use('/api/events', auth, eventRoutes);
 app.use('/api/logs', auth, logRoutes);
 
 // Health check route

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -46,9 +46,10 @@ interface LogEntry {
   timestamp: string;
   callsign: string;
   message: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  status: 'PENDING' | 'IN_PROGRESS' | 'RESOLVED';
-  assignedTo?: User;
+  talkgroup: string;
+  channel: string;
+  messageType: 'INFO' | 'URGENT' | 'CHECK-IN' | 'OTHER';
+  operator?: User;
 }
 
 const LogEntryList: React.FC = () => {
@@ -57,80 +58,79 @@ const LogEntryList: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchLogEntries();
-  }, [statusFilter, priorityFilter]);
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
-  const fetchLogEntries = async () => {
+  const fetchLogEntries = useCallback(async () => {
     try {
-      const url = new URL('http://localhost:5001/api/logs');
-      if (statusFilter !== 'ALL') {
-        url.searchParams.append('status', statusFilter);
-      }
-      if (priorityFilter !== 'ALL') {
-        url.searchParams.append('priority', priorityFilter);
-      }
-      const response = await axios.get(url.toString());
+      const response = await axios.get('/api/logs', {
+        headers: getAuthHeader()
+      });
       setLogEntries(response.data);
     } catch (error) {
       console.error('Error fetching log entries:', error);
+      setError('Failed to fetch log entries');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchLogEntries();
+  }, [fetchLogEntries]);
 
   const handleCreateLogEntry = async (logData: any) => {
     try {
-      await axios.post('http://localhost:5001/api/logs', logData);
+      const response = await axios.post('/api/logs', logData, {
+        headers: getAuthHeader()
+      });
+      console.log('Log entry created:', response.data);
       setIsCreateDialogOpen(false);
       fetchLogEntries();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating log entry:', error);
+      setError(error.response?.data?.message || 'Failed to create log entry');
     }
   };
 
   const handleEditLogEntry = async (logData: any) => {
     if (!selectedEntry) return;
     try {
-      await axios.put(`http://localhost:5001/api/logs/${selectedEntry._id}`, logData);
+      const response = await axios.put(`/api/logs/${selectedEntry._id}`, logData, {
+        headers: getAuthHeader()
+      });
+      console.log('Log entry updated:', response.data);
       setIsEditDialogOpen(false);
       fetchLogEntries();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating log entry:', error);
+      setError(error.response?.data?.message || 'Failed to update log entry');
     }
   };
 
   const handleDeleteLogEntry = async (logId: string) => {
     if (!window.confirm('Are you sure you want to delete this log entry?')) return;
     try {
-      await axios.delete(`http://localhost:5001/api/logs/${logId}`);
+      await axios.delete(`/api/logs/${logId}`, {
+        headers: getAuthHeader()
+      });
       fetchLogEntries();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting log entry:', error);
+      setError(error.response?.data?.message || 'Failed to delete log entry');
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'HIGH':
+  const getMessageTypeColor = (type: string) => {
+    switch (type) {
+      case 'URGENT':
         return 'error';
-      case 'MEDIUM':
-        return 'warning';
-      case 'LOW':
+      case 'CHECK-IN':
         return 'success';
-      default:
-        return 'default';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return 'warning';
-      case 'IN_PROGRESS':
+      case 'INFO':
         return 'info';
-      case 'RESOLVED':
-        return 'success';
       default:
         return 'default';
     }
@@ -142,29 +142,17 @@ const LogEntryList: React.FC = () => {
         <Typography variant="h4">Log Entries</Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>Status</InputLabel>
+            <InputLabel>Message Type</InputLabel>
             <Select
               value={statusFilter}
-              label="Status"
+              label="Message Type"
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <MenuItem value="ALL">All</MenuItem>
-              <MenuItem value="PENDING">Pending</MenuItem>
-              <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
-              <MenuItem value="RESOLVED">Resolved</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>Priority</InputLabel>
-            <Select
-              value={priorityFilter}
-              label="Priority"
-              onChange={(e) => setPriorityFilter(e.target.value)}
-            >
-              <MenuItem value="ALL">All</MenuItem>
-              <MenuItem value="LOW">Low</MenuItem>
-              <MenuItem value="MEDIUM">Medium</MenuItem>
-              <MenuItem value="HIGH">High</MenuItem>
+              <MenuItem value="INFO">Info</MenuItem>
+              <MenuItem value="URGENT">Urgent</MenuItem>
+              <MenuItem value="CHECK-IN">Check-in</MenuItem>
+              <MenuItem value="OTHER">Other</MenuItem>
             </Select>
           </FormControl>
           <Button
@@ -185,15 +173,24 @@ const LogEntryList: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography variant="subtitle1">{entry.callsign}</Typography>
                 <Chip
-                  label={entry.priority}
-                  color={getPriorityColor(entry.priority)}
+                  label={entry.messageType}
+                  color={getMessageTypeColor(entry.messageType)}
                   size="small"
                 />
-                <Chip
-                  label={entry.status}
-                  color={getStatusColor(entry.status)}
-                  size="small"
-                />
+                {entry.talkgroup && (
+                  <Chip
+                    label={`TG: ${entry.talkgroup}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
+                {entry.channel && (
+                  <Chip
+                    label={`CH: ${entry.channel}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
               </Box>
               <Box>
                 <IconButton
@@ -220,9 +217,9 @@ const LogEntryList: React.FC = () => {
               />
             )}
             <Typography variant="body1">{entry.message}</Typography>
-            {entry.assignedTo && (
+            {entry.operator && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Assigned to: {entry.assignedTo.callsign}
+                Operator: {entry.operator.callsign}
               </Typography>
             )}
           </Paper>
@@ -255,8 +252,13 @@ const LogEntryList: React.FC = () => {
           {selectedEntry && (
             <LogEntryForm
               initialData={{
-                ...selectedEntry,
+                event: selectedEntry.event,
                 timestamp: new Date(selectedEntry.timestamp),
+                callsign: selectedEntry.callsign,
+                message: selectedEntry.message,
+                talkgroup: selectedEntry.talkgroup,
+                channel: selectedEntry.channel,
+                messageType: selectedEntry.messageType,
               }}
               onSubmit={handleEditLogEntry}
               onCancel={() => setIsEditDialogOpen(false)}

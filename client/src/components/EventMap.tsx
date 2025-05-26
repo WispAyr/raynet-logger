@@ -1,13 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { Box, Paper, Typography, IconButton, Drawer, List, ListItem, ListItemText, ListItemIcon, Divider } from '@mui/material';
-import {
-  Settings as SettingsIcon,
-  LocationOn as LocationIcon,
-  Layers as LayersIcon,
-  Terrain as TerrainIcon,
-  Satellite as SatelliteIcon,
-} from '@mui/icons-material';
+import React from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { Box } from '@mui/material';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -19,162 +12,58 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-interface MapConfig {
-  center: [number, number];
-  zoom: number;
-  baseLayer: 'street' | 'satellite' | 'terrain';
-  showMarkers: boolean;
-  showAreas: boolean;
-  showHeatmap: boolean;
-}
-
 interface Event {
   _id: string;
   name: string;
+  description?: string;
   location?: {
     coordinates: [number, number];
     radius?: number;
   };
-  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 }
 
 interface EventMapProps {
   events: Event[];
   onEventSelect?: (event: Event) => void;
-  onLocationUpdate?: (eventId: string, coordinates: [number, number], radius?: number) => void;
 }
 
-const EventMap: React.FC<EventMapProps> = ({
-  events,
-  onEventSelect,
-  onLocationUpdate,
-}) => {
-  const [config, setConfig] = useState<MapConfig>({
-    center: [51.505, -0.09], // Default to London
-    zoom: 13,
-    baseLayer: 'street',
-    showMarkers: true,
-    showAreas: true,
-    showHeatmap: false,
-  });
-
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-
-  const handleMarkerClick = (event: Event) => {
-    setSelectedEvent(event);
-    onEventSelect?.(event);
-  };
-
-  const handleLocationUpdate = (eventId: string, coordinates: [number, number], radius?: number) => {
-    onLocationUpdate?.(eventId, coordinates, radius);
-  };
-
-  const getTileLayer = () => {
-    switch (config.baseLayer) {
-      case 'satellite':
-        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-      case 'terrain':
-        return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
-      default:
-        return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    }
-  };
+const EventMap: React.FC<EventMapProps> = ({ events, onEventSelect }) => {
+  const defaultCenter: [number, number] = [51.505, -0.09]; // London coordinates
+  const defaultZoom = 13;
 
   return (
-    <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+    <Box sx={{ height: 400, width: '100%', position: 'relative' }}>
       <MapContainer
-        center={config.center}
-        zoom={config.zoom}
-        style={{ height: '100%', width: '100%', minHeight: '400px' }}
-        scrollWheelZoom={true}
+        center={defaultCenter}
+        zoom={defaultZoom}
+        style={{ height: '100%', width: '100%' }}
       >
         <TileLayer
-          url={getTileLayer()}
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
-        {config.showMarkers && events.map((event) => (
-          event.location && (
-            <Marker
-              key={event._id}
-              position={event.location.coordinates}
-              eventHandlers={{
-                click: () => handleMarkerClick(event),
-              }}
-            >
-              <Popup>
-                <Typography variant="subtitle1">{event.name}</Typography>
-                <Typography variant="body2">Status: {event.status}</Typography>
-              </Popup>
-            </Marker>
-          )
-        ))}
+        {events.map((event) => {
+          if (event.location?.coordinates) {
+            return (
+              <Marker
+                key={event._id}
+                position={event.location.coordinates}
+                eventHandlers={{
+                  click: () => onEventSelect?.(event),
+                }}
+              >
+                <Popup>
+                  <div>
+                    <h3>{event.name}</h3>
+                    {event.description && <p>{event.description}</p>}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          }
+          return null;
+        })}
       </MapContainer>
-
-      <IconButton
-        sx={{
-          position: 'absolute',
-          top: 16,
-          right: 16,
-          bgcolor: 'background.paper',
-          '&:hover': { bgcolor: 'background.paper' },
-        }}
-        onClick={() => setIsConfigOpen(true)}
-      >
-        <SettingsIcon />
-      </IconButton>
-
-      <Drawer
-        anchor="right"
-        open={isConfigOpen}
-        onClose={() => setIsConfigOpen(false)}
-      >
-        <Box sx={{ width: 300, p: 2 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Map Configuration</Typography>
-          
-          <List>
-            <ListItem>
-              <ListItemIcon>
-                <LayersIcon />
-              </ListItemIcon>
-              <ListItemText primary="Base Layer" />
-            </ListItem>
-            <ListItem component="div" onClick={() => setConfig({ ...config, baseLayer: 'street' })}>
-              <ListItemText primary="Street Map" />
-            </ListItem>
-            <ListItem component="div" onClick={() => setConfig({ ...config, baseLayer: 'satellite' })}>
-              <ListItemIcon>
-                <SatelliteIcon />
-              </ListItemIcon>
-              <ListItemText primary="Satellite" />
-            </ListItem>
-            <ListItem component="div" onClick={() => setConfig({ ...config, baseLayer: 'terrain' })}>
-              <ListItemIcon>
-                <TerrainIcon />
-              </ListItemIcon>
-              <ListItemText primary="Terrain" />
-            </ListItem>
-
-            <Divider sx={{ my: 2 }} />
-
-            <ListItem>
-              <ListItemIcon>
-                <LocationIcon />
-              </ListItemIcon>
-              <ListItemText primary="Display Options" />
-            </ListItem>
-            <ListItem component="div" onClick={() => setConfig({ ...config, showMarkers: !config.showMarkers })}>
-              <ListItemText primary="Show Markers" />
-            </ListItem>
-            <ListItem component="div" onClick={() => setConfig({ ...config, showAreas: !config.showAreas })}>
-              <ListItemText primary="Show Areas" />
-            </ListItem>
-            <ListItem component="div" onClick={() => setConfig({ ...config, showHeatmap: !config.showHeatmap })}>
-              <ListItemText primary="Show Heatmap" />
-            </ListItem>
-          </List>
-        </Box>
-      </Drawer>
     </Box>
   );
 };

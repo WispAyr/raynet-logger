@@ -15,12 +15,13 @@ router.get('/', auth, async (req, res) => {
 
     const events = await Event.find(query)
       .populate('createdBy', 'callsign')
-      .populate('operators', 'callsign')
+      .populate('operators.user', 'callsign')
       .sort({ startDate: -1 });
     
     res.json(events);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching events:', error);
+    res.status(500).json({ message: 'Error fetching events' });
   }
 });
 
@@ -29,8 +30,8 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
       .populate('createdBy', 'callsign')
-      .populate('operators', 'callsign')
-      .populate('linkedEvents');
+      .populate('operators.user', 'callsign')
+      .populate('channels.assignedTo', 'callsign');
     
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -38,7 +39,8 @@ router.get('/:id', auth, async (req, res) => {
     
     res.json(event);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching event:', error);
+    res.status(500).json({ message: 'Error fetching event' });
   }
 });
 
@@ -54,7 +56,8 @@ router.post('/', auth, async (req, res) => {
     req.app.get('io').emit('newEvent', savedEvent);
     res.status(201).json(savedEvent);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating event:', error);
+    res.status(400).json({ message: 'Error creating event' });
   }
 });
 
@@ -76,7 +79,8 @@ router.put('/:id', auth, async (req, res) => {
     req.app.get('io').emit('eventUpdated', updatedEvent);
     res.json(updatedEvent);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error updating event:', error);
+    res.status(400).json({ message: 'Error updating event' });
   }
 });
 
@@ -97,7 +101,8 @@ router.delete('/:id', auth, async (req, res) => {
     req.app.get('io').emit('eventDeleted', req.params.id);
     res.json({ message: 'Event deleted' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error deleting event:', error);
+    res.status(500).json({ message: 'Error deleting event' });
   }
 });
 
@@ -146,6 +151,96 @@ router.post('/:id/operators', auth, async (req, res) => {
     res.json({ message: 'Operator added to event' });
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Operator check-in
+router.post('/:id/check-in', auth, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const operatorIndex = event.operators.findIndex(
+      op => op.user.toString() === req.user._id.toString()
+    );
+
+    if (operatorIndex === -1) {
+      return res.status(403).json({ message: 'Not authorized to check in to this event' });
+    }
+
+    event.operators[operatorIndex].status = 'ACTIVE';
+    event.operators[operatorIndex].lastCheckIn = new Date();
+    await event.save();
+
+    res.json({ message: 'Check-in successful' });
+  } catch (error) {
+    console.error('Error checking in:', error);
+    res.status(500).json({ message: 'Error checking in' });
+  }
+});
+
+// Operator welfare check
+router.post('/:id/welfare-check', auth, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const operatorIndex = event.operators.findIndex(
+      op => op.user.toString() === req.user._id.toString()
+    );
+
+    if (operatorIndex === -1) {
+      return res.status(403).json({ message: 'Not authorized to perform welfare check for this event' });
+    }
+
+    // Create a log entry for the welfare check
+    const logEntry = new LogEntry({
+      event: event._id,
+      operator: req.user._id,
+      messageType: 'CHECK-IN',
+      message: 'Welfare check completed',
+      timestamp: new Date()
+    });
+    await logEntry.save();
+
+    res.json({ message: 'Welfare check recorded' });
+  } catch (error) {
+    console.error('Error performing welfare check:', error);
+    res.status(500).json({ message: 'Error performing welfare check' });
+  }
+});
+
+// Update operator status
+router.put('/:id/operator-status', auth, async (req, res) => {
+  try {
+    const { status, zoneId } = req.body;
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const operatorIndex = event.operators.findIndex(
+      op => op.user.toString() === req.user._id.toString()
+    );
+
+    if (operatorIndex === -1) {
+      return res.status(403).json({ message: 'Not authorized to update status for this event' });
+    }
+
+    event.operators[operatorIndex].status = status;
+    if (zoneId) {
+      event.operators[operatorIndex].currentZone = zoneId;
+    }
+    await event.save();
+
+    res.json({ message: 'Status updated successfully' });
+  } catch (error) {
+    console.error('Error updating operator status:', error);
+    res.status(500).json({ message: 'Error updating operator status' });
   }
 });
 

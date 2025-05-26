@@ -1,72 +1,37 @@
-import React, { useState, useMemo } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
-import Layout from './components/Layout';
+import EventForm from './components/EventForm';
+import EventOverview from './components/EventOverview';
+import LogEntryList from './components/LogEntryList';
+import LogEntryForm from './components/LogEntryForm';
+import OperatorView from './components/OperatorView';
+import { PrivateRoute } from './components/PrivateRoute';
 
-// Create theme function
-const createAppTheme = (mode: 'light' | 'dark') => createTheme({
+const theme = createTheme({
   palette: {
-    mode,
+    mode: 'dark',
     primary: {
-      main: mode === 'dark' ? '#90caf9' : '#1976d2',
+      main: '#90caf9',
     },
     secondary: {
-      main: mode === 'dark' ? '#f48fb1' : '#dc004e',
-    },
-    background: {
-      default: mode === 'dark' ? '#121212' : '#f5f5f5',
-      paper: mode === 'dark' ? '#1e1e1e' : '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h1: {
-      fontSize: '2.5rem',
-      fontWeight: 500,
-    },
-    h2: {
-      fontSize: '2rem',
-      fontWeight: 500,
-    },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        body: {
-          scrollbarColor: mode === 'dark' ? "#6b6b6b #2b2b2b" : "#6b6b6b #f5f5f5",
-          "&::-webkit-scrollbar, & *::-webkit-scrollbar": {
-            backgroundColor: mode === 'dark' ? "#2b2b2b" : "#f5f5f5",
-          },
-          "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
-            borderRadius: 8,
-            backgroundColor: mode === 'dark' ? "#6b6b6b" : "#6b6b6b",
-            minHeight: 24,
-            border: mode === 'dark' ? "3px solid #2b2b2b" : "3px solid #f5f5f5",
-          },
-        },
-      },
+      main: '#f48fb1',
     },
   },
 });
 
-// Protected route wrapper
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+const OperatorViewWithParams = () => {
+  const { eventId } = useParams<{ eventId: string }>();
+  if (!eventId) return null;
+  return <OperatorView eventId={eventId} />;
 };
 
-function App() {
-  const [mode, setMode] = useState<'light' | 'dark'>('dark');
-  const theme = useMemo(() => createAppTheme(mode), [mode]);
-
-  const toggleTheme = () => {
-    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
-  };
-
+const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -78,18 +43,65 @@ function App() {
             <Route
               path="/"
               element={
-                <ProtectedRoute>
-                  <Layout onThemeToggle={toggleTheme} isDarkMode={mode === 'dark'}>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
               }
             />
+            <Route
+              path="/events/new"
+              element={
+                <PrivateRoute>
+                  <EventForm />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/events/:eventId"
+              element={
+                <PrivateRoute>
+                  <EventOverview />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/events/:eventId/edit"
+              element={
+                <PrivateRoute>
+                  <EventForm />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/events/:eventId/logs"
+              element={
+                <PrivateRoute>
+                  <LogEntryList />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/events/:eventId/logs/new"
+              element={
+                <PrivateRoute>
+                  <LogEntryForm />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/operator/:eventId"
+              element={
+                <PrivateRoute>
+                  <OperatorViewWithParams />
+                </PrivateRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
       </AuthProvider>
     </ThemeProvider>
   );
-}
+};
 
 export default App;

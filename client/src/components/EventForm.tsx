@@ -1,307 +1,188 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Box,
+  TextField,
   Button,
   Typography,
-  Chip,
-  Autocomplete,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  Alert,
+  Paper,
 } from '@mui/material';
+import { Grid } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { AdapterLuxon } from '@mui/x-date-pickers/AdapterLuxon';
+import { DateTime } from 'luxon';
 import axios from 'axios';
-import EventLocationForm from './EventLocationForm';
-import { useAuth } from '../contexts/AuthContext';
-
-interface User {
-  _id: string;
-  callsign: string;
-}
-
-interface Event {
-  _id?: string;
-  name: string;
-  description: string;
-  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
-  startDate?: Date;
-  endDate?: Date;
-  talkgroups?: Array<{ name: string; description?: string; active?: boolean }>;
-  channels?: Array<{ name: string; description?: string; active?: boolean }>;
-  location?: {
-    coordinates: [number, number];
-    radius?: number;
-  };
-}
 
 interface EventFormProps {
-  event?: Event;
-  onSubmit: (data: any) => void;
-  onCancel: () => void;
+  onSubmit?: (eventData: any) => void;
+  onCancel?: () => void;
+  initialData?: any;
 }
 
-const EventForm: React.FC<EventFormProps> = ({
-  event,
-  onSubmit,
-  onCancel,
-}) => {
-  const { user } = useAuth();
+const EventForm: React.FC<EventFormProps> = ({ onSubmit, onCancel, initialData }) => {
+  const navigate = useNavigate();
+  const { eventId } = useParams<{ eventId: string }>();
   const [formData, setFormData] = useState({
-    name: event?.name || '',
-    description: event?.description || '',
-    status: event?.status || 'ACTIVE',
-    startDate: event?.startDate || new Date(),
-    endDate: event?.endDate || null,
-    talkgroups: event?.talkgroups || [],
-    channels: event?.channels || [],
-    location: event?.location || undefined,
+    name: '',
+    description: '',
+    startDate: DateTime.now(),
+    endDate: DateTime.now().plus({ days: 1 }),
+    location: {
+      name: '',
+      coordinates: [0, 0],
+    },
+    checkInInterval: 30,
+    welfareCheckInterval: 120,
   });
 
-  const [error, setError] = useState<string | null>(null);
-  const [operators, setOperators] = useState<User[]>([]);
-  const [selectedOperators, setSelectedOperators] = useState<User[]>([]);
-  const [newTalkgroup, setNewTalkgroup] = useState({ name: '', description: '' });
-  const [newChannel, setNewChannel] = useState({ name: '', description: '' });
-  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
-
   useEffect(() => {
-    const fetchOperators = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('/api/users', {
-          headers: { Authorization: `Bearer ${token}` }
+    if (eventId) {
+      axios.get(`/api/events/${eventId}`)
+        .then(response => {
+          const event = response.data;
+          setFormData({
+            ...event,
+            startDate: DateTime.fromISO(event.startDate),
+            endDate: DateTime.fromISO(event.endDate),
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching event:', error);
+          navigate('/');
         });
-        setOperators(response.data);
-      } catch (error) {
-        console.error('Error fetching operators:', error);
-      }
-    };
-    fetchOperators();
-  }, []);
+    }
+  }, [eventId, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    // Validate required fields
-    if (!formData.name.trim()) {
-      setError('Event name is required');
-      return;
-    }
-
-    if (!formData.startDate) {
-      setError('Start date is required');
-      return;
-    }
-
-    if (!user?._id) {
-      setError('User not authenticated');
-      return;
-    }
-
-    // Prepare the data for submission
-    const eventData = {
-      name: formData.name.trim(),
-      description: formData.description.trim(),
-      status: formData.status,
-      startDate: formData.startDate.toISOString(),
-      endDate: formData.endDate ? formData.endDate.toISOString() : undefined,
-      talkgroups: formData.talkgroups.map(tg => ({
-        name: tg.name.trim(),
-        description: tg.description?.trim() || undefined,
-        active: true
-      })),
-      channels: formData.channels.map(ch => ({
-        name: ch.name.trim(),
-        description: ch.description?.trim() || undefined,
-        active: true
-      })),
-      location: formData.location,
-      createdBy: user._id
-    };
-
-    console.log('Submitting event data:', eventData);
-    onSubmit(eventData);
-  };
-
-  const handleAddTalkgroup = () => {
-    if (newTalkgroup.name.trim()) {
-      setFormData({
+    try {
+      const eventData = {
         ...formData,
-        talkgroups: [...formData.talkgroups, { 
-          name: newTalkgroup.name.trim(),
-          description: newTalkgroup.description.trim() || undefined,
-          active: true
-        }],
-      });
-      setNewTalkgroup({ name: '', description: '' });
+        startDate: formData.startDate.toISO(),
+        endDate: formData.endDate.toISO(),
+      };
+
+      if (onSubmit) {
+        onSubmit(eventData);
+      } else {
+        if (eventId) {
+          await axios.put(`/api/events/${eventId}`, eventData);
+        } else {
+          await axios.post('/api/events', eventData);
+        }
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Error saving event:', error);
     }
   };
 
-  const handleRemoveTalkgroup = (index: number) => {
-    const updatedTalkgroups = formData.talkgroups.filter((_, i) => i !== index);
-    setFormData({ ...formData, talkgroups: updatedTalkgroups });
-  };
-
-  const handleAddChannel = () => {
-    if (newChannel.name.trim()) {
-      setFormData({
-        ...formData,
-        channels: [...formData.channels, { 
-          name: newChannel.name.trim(),
-          description: newChannel.description.trim() || undefined,
-          active: true
-        }],
-      });
-      setNewChannel({ name: '', description: '' });
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      navigate('/');
     }
-  };
-
-  const handleRemoveChannel = (index: number) => {
-    const updatedChannels = formData.channels.filter((_, i) => i !== index);
-    setFormData({ ...formData, channels: updatedChannels });
-  };
-
-  const handleLocationSubmit = (location: { coordinates: [number, number]; radius?: number }) => {
-    setFormData({ ...formData, location });
-    setIsLocationDialogOpen(false);
   };
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        <TextField
-          fullWidth
-          label="Event Name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-          sx={{ mb: 2 }}
-        />
-
-        <TextField
-          fullWidth
-          label="Description"
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          multiline
-          rows={3}
-          sx={{ mb: 2 }}
-        />
-
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel>Status</InputLabel>
-          <Select
-            value={formData.status}
-            label="Status"
-            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-          >
-            <MenuItem value="ACTIVE">Active</MenuItem>
-            <MenuItem value="COMPLETED">Completed</MenuItem>
-            <MenuItem value="ARCHIVED">Archived</MenuItem>
-          </Select>
-        </FormControl>
-
-        <DateTimePicker
-          label="Start Date"
-          value={formData.startDate}
-          onChange={(date) => setFormData({ ...formData, startDate: date || new Date() })}
-          sx={{ mb: 2, width: '100%' }}
-        />
-
-        <DateTimePicker
-          label="End Date"
-          value={formData.endDate}
-          onChange={(date) => setFormData({ ...formData, endDate: date || null })}
-          sx={{ mb: 2, width: '100%' }}
-        />
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Talkgroups
-          </Typography>
-          {formData.talkgroups.map((tg, index) => (
-            <Chip
-              key={index}
-              label={tg.name}
-              onDelete={() => handleRemoveTalkgroup(index)}
-              sx={{ mr: 1, mb: 1 }}
-            />
-          ))}
-          <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-            <TextField
-              label="New Talkgroup"
-              value={newTalkgroup.name}
-              onChange={(e) => setNewTalkgroup({ ...newTalkgroup, name: e.target.value })}
-              size="small"
-            />
-            <TextField
-              label="Description"
-              value={newTalkgroup.description}
-              onChange={(e) => setNewTalkgroup({ ...newTalkgroup, description: e.target.value })}
-              size="small"
-            />
-            <Button onClick={handleAddTalkgroup} variant="outlined" size="small">
-              Add
-            </Button>
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Channels
-          </Typography>
-          {formData.channels.map((ch, index) => (
-            <Chip
-              key={index}
-              label={ch.name}
-              onDelete={() => handleRemoveChannel(index)}
-              sx={{ mr: 1, mb: 1 }}
-            />
-          ))}
-          <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-            <TextField
-              label="New Channel"
-              value={newChannel.name}
-              onChange={(e) => setNewChannel({ ...newChannel, name: e.target.value })}
-              size="small"
-            />
-            <TextField
-              label="Description"
-              value={newChannel.description}
-              onChange={(e) => setNewChannel({ ...newChannel, description: e.target.value })}
-              size="small"
-            />
-            <Button onClick={handleAddChannel} variant="outlined" size="small">
-              Add
-            </Button>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
-          <Button onClick={onCancel} variant="outlined">
-            Cancel
-          </Button>
-          <Button type="submit" variant="contained" color="primary">
-            {event ? 'Update Event' : 'Create Event'}
-          </Button>
-        </Box>
-      </Box>
-    </LocalizationProvider>
+    <Box sx={{ p: 3 }}>
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h5" gutterBottom>
+          {eventId ? 'Edit Event' : 'Create New Event'}
+        </Typography>
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Event Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                multiline
+                rows={4}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <LocalizationProvider dateAdapter={AdapterLuxon}>
+                <DateTimePicker
+                  label="Start Date"
+                  value={formData.startDate}
+                  onChange={(newValue) => newValue && setFormData({ ...formData, startDate: newValue })}
+                />
+              </LocalizationProvider>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <LocalizationProvider dateAdapter={AdapterLuxon}>
+                <DateTimePicker
+                  label="End Date"
+                  value={formData.endDate}
+                  onChange={(newValue) => newValue && setFormData({ ...formData, endDate: newValue })}
+                />
+              </LocalizationProvider>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Location Name"
+                value={formData.location.name}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  location: { ...formData.location, name: e.target.value }
+                })}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Check-in Interval (minutes)"
+                type="number"
+                value={formData.checkInInterval}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  checkInInterval: parseInt(e.target.value)
+                })}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Welfare Check Interval (minutes)"
+                type="number"
+                value={formData.welfareCheckInterval}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  welfareCheckInterval: parseInt(e.target.value)
+                })}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                <Button variant="outlined" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button variant="contained" type="submit">
+                  {eventId ? 'Update' : 'Create'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </form>
+      </Paper>
+    </Box>
   );
 };
 

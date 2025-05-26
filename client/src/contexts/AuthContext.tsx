@@ -9,7 +9,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
+  loading: boolean;
   login: (callsign: string, password: string) => Promise<void>;
   register: (callsign: string, password: string) => Promise<void>;
   logout: () => void;
@@ -27,73 +27,49 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      checkAuth();
+      axios.get('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(response => {
+          setUser(response.data);
+        })
+        .catch(() => {
+          localStorage.removeItem('token');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
     }
   }, []);
 
-  const checkAuth = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await axios.get('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUser(response.data);
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('token');
-      setUser(null);
-      setIsAuthenticated(false);
-    }
-  };
-
   const login = async (callsign: string, password: string) => {
-    try {
-      const response = await axios.post('/api/auth/login', {
-        callsign,
-        password
-      });
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      setUser(user);
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw new Error('Invalid credentials');
-    }
+    const response = await axios.post('/api/auth/login', { callsign, password });
+    const { token, user } = response.data;
+    localStorage.setItem('token', token);
+    setUser(user);
   };
 
   const register = async (callsign: string, password: string) => {
-    try {
-      const response = await axios.post('/api/auth/register', {
-        callsign,
-        password
-      });
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      setUser(user);
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error('Registration failed:', error);
-      throw new Error('Registration failed');
-    }
+    const response = await axios.post('/api/auth/register', { callsign, password });
+    const { token, user } = response.data;
+    localStorage.setItem('token', token);
+    setUser(user);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
-    setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
