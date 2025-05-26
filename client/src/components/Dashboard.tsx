@@ -3,6 +3,7 @@ import { Typography, Box, Button, Dialog, DialogTitle, DialogContent } from '@mu
 import { Add as AddIcon } from '@mui/icons-material';
 import LogEntryList from './LogEntryList';
 import LogEntryForm from './LogEntryForm';
+import EventOverview from './EventOverview';
 
 const Dashboard: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -21,6 +22,7 @@ const Dashboard: React.FC = () => {
         </Button>
       </Box>
 
+      <EventOverview />
       <LogEntryList />
 
       <Dialog

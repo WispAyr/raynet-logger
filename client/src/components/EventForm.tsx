@@ -10,55 +10,75 @@ import {
   Typography,
   Chip,
   Autocomplete,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  Alert,
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import axios from 'axios';
-
-interface EventFormProps {
-  initialData?: {
-    name: string;
-    description: string;
-    status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
-    startDate: Date;
-    endDate?: Date;
-    talkgroups: Array<{ name: string; description?: string }>;
-    channels: Array<{ name: string; description?: string }>;
-  };
-  onSubmit: (data: any) => void;
-  onCancel: () => void;
-}
+import EventLocationForm from './EventLocationForm';
+import { useAuth } from '../contexts/AuthContext';
 
 interface User {
   _id: string;
   callsign: string;
 }
 
+interface Event {
+  _id?: string;
+  name: string;
+  description: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  startDate?: Date;
+  endDate?: Date;
+  talkgroups?: Array<{ name: string; description?: string; active?: boolean }>;
+  channels?: Array<{ name: string; description?: string; active?: boolean }>;
+  location?: {
+    coordinates: [number, number];
+    radius?: number;
+  };
+}
+
+interface EventFormProps {
+  event?: Event;
+  onSubmit: (data: any) => void;
+  onCancel: () => void;
+}
+
 const EventForm: React.FC<EventFormProps> = ({
-  initialData,
+  event,
   onSubmit,
   onCancel,
 }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
-    name: initialData?.name || '',
-    description: initialData?.description || '',
-    status: initialData?.status || 'ACTIVE',
-    startDate: initialData?.startDate || new Date(),
-    endDate: initialData?.endDate || null,
-    talkgroups: initialData?.talkgroups || [],
-    channels: initialData?.channels || [],
+    name: event?.name || '',
+    description: event?.description || '',
+    status: event?.status || 'ACTIVE',
+    startDate: event?.startDate || new Date(),
+    endDate: event?.endDate || null,
+    talkgroups: event?.talkgroups || [],
+    channels: event?.channels || [],
+    location: event?.location || undefined,
   });
 
+  const [error, setError] = useState<string | null>(null);
   const [operators, setOperators] = useState<User[]>([]);
   const [selectedOperators, setSelectedOperators] = useState<User[]>([]);
   const [newTalkgroup, setNewTalkgroup] = useState({ name: '', description: '' });
   const [newChannel, setNewChannel] = useState({ name: '', description: '' });
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchOperators = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/users');
+        const token = localStorage.getItem('token');
+        const response = await axios.get('/api/users', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         setOperators(response.data);
       } catch (error) {
         console.error('Error fetching operators:', error);
@@ -69,14 +89,58 @@ const EventForm: React.FC<EventFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    setError(null);
+
+    // Validate required fields
+    if (!formData.name.trim()) {
+      setError('Event name is required');
+      return;
+    }
+
+    if (!formData.startDate) {
+      setError('Start date is required');
+      return;
+    }
+
+    if (!user?._id) {
+      setError('User not authenticated');
+      return;
+    }
+
+    // Prepare the data for submission
+    const eventData = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      status: formData.status,
+      startDate: formData.startDate.toISOString(),
+      endDate: formData.endDate ? formData.endDate.toISOString() : undefined,
+      talkgroups: formData.talkgroups.map(tg => ({
+        name: tg.name.trim(),
+        description: tg.description?.trim() || undefined,
+        active: true
+      })),
+      channels: formData.channels.map(ch => ({
+        name: ch.name.trim(),
+        description: ch.description?.trim() || undefined,
+        active: true
+      })),
+      location: formData.location,
+      createdBy: user._id
+    };
+
+    console.log('Submitting event data:', eventData);
+    onSubmit(eventData);
   };
 
   const handleAddTalkgroup = () => {
-    if (newTalkgroup.name) {
+    if (newTalkgroup.name.trim()) {
       setFormData({
         ...formData,
-        talkgroups: [...formData.talkgroups, { ...newTalkgroup }],
+        talkgroups: [...formData.talkgroups, { 
+          name: newTalkgroup.name.trim(),
+          description: newTalkgroup.description.trim() || undefined,
+          active: true
+        }],
       });
       setNewTalkgroup({ name: '', description: '' });
     }
@@ -88,10 +152,14 @@ const EventForm: React.FC<EventFormProps> = ({
   };
 
   const handleAddChannel = () => {
-    if (newChannel.name) {
+    if (newChannel.name.trim()) {
       setFormData({
         ...formData,
-        channels: [...formData.channels, { ...newChannel }],
+        channels: [...formData.channels, { 
+          name: newChannel.name.trim(),
+          description: newChannel.description.trim() || undefined,
+          active: true
+        }],
       });
       setNewChannel({ name: '', description: '' });
     }
@@ -102,9 +170,20 @@ const EventForm: React.FC<EventFormProps> = ({
     setFormData({ ...formData, channels: updatedChannels });
   };
 
+  const handleLocationSubmit = (location: { coordinates: [number, number]; radius?: number }) => {
+    setFormData({ ...formData, location });
+    setIsLocationDialogOpen(false);
+  };
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
         <TextField
           fullWidth
           label="Event Name"
@@ -151,10 +230,10 @@ const EventForm: React.FC<EventFormProps> = ({
           sx={{ mb: 2, width: '100%' }}
         />
 
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Talkgroups
-        </Typography>
         <Box sx={{ mb: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Talkgroups
+          </Typography>
           {formData.talkgroups.map((tg, index) => (
             <Chip
               key={index}
@@ -182,10 +261,10 @@ const EventForm: React.FC<EventFormProps> = ({
           </Box>
         </Box>
 
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Channels
-        </Typography>
         <Box sx={{ mb: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Channels
+          </Typography>
           {formData.channels.map((ch, index) => (
             <Chip
               key={index}
@@ -213,29 +292,12 @@ const EventForm: React.FC<EventFormProps> = ({
           </Box>
         </Box>
 
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Operators
-        </Typography>
-        <Autocomplete
-          multiple
-          options={operators}
-          getOptionLabel={(option) => option.callsign}
-          value={selectedOperators}
-          onChange={(_, newValue) => setSelectedOperators(newValue)}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Select Operators"
-              placeholder="Add operators"
-            />
-          )}
-          sx={{ mb: 2 }}
-        />
-
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-          <Button onClick={onCancel}>Cancel</Button>
+        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
+          <Button onClick={onCancel} variant="outlined">
+            Cancel
+          </Button>
           <Button type="submit" variant="contained" color="primary">
-            {initialData ? 'Save Changes' : 'Create Event'}
+            {event ? 'Update Event' : 'Create Event'}
           </Button>
         </Box>
       </Box>

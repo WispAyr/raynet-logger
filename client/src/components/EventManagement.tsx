@@ -11,10 +11,12 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Alert,
 } from '@mui/material';
 import axios from 'axios';
 import EventForm from './EventForm';
 import EventCard from './EventCard';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Event {
   _id: string;
@@ -46,64 +48,92 @@ const EventManagement: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchEvents();
   }, [statusFilter]);
 
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchEvents = async () => {
     try {
       const url = statusFilter === 'ALL'
-        ? 'http://localhost:5001/api/events'
-        : `http://localhost:5001/api/events?status=${statusFilter}`;
-      const response = await axios.get(url);
+        ? '/api/events'
+        : `/api/events?status=${statusFilter}`;
+      const response = await axios.get(url, {
+        headers: getAuthHeader()
+      });
       setEvents(response.data);
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       console.error('Error fetching events:', error);
+      setError(error.response?.data?.message || 'Failed to fetch events');
     }
   };
 
   const handleCreateEvent = async (eventData: EventFormData) => {
     try {
-      await axios.post('http://localhost:5001/api/events', eventData);
+      const response = await axios.post('/api/events', eventData, {
+        headers: getAuthHeader()
+      });
+      console.log('Event created:', response.data);
       setIsCreateDialogOpen(false);
       fetchEvents();
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       console.error('Error creating event:', error);
+      setError(error.response?.data?.message || 'Failed to create event');
     }
   };
 
   const handleEditEvent = async (eventData: EventFormData) => {
     if (!selectedEvent) return;
     try {
-      await axios.put(`http://localhost:5001/api/events/${selectedEvent._id}`, eventData);
+      await axios.put(`/api/events/${selectedEvent._id}`, eventData, {
+        headers: getAuthHeader()
+      });
       setIsEditDialogOpen(false);
       fetchEvents();
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       console.error('Error updating event:', error);
+      setError(error.response?.data?.message || 'Failed to update event');
     }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
     if (!window.confirm('Are you sure you want to delete this event?')) return;
     try {
-      await axios.delete(`http://localhost:5001/api/events/${eventId}`);
+      await axios.delete(`/api/events/${eventId}`, {
+        headers: getAuthHeader()
+      });
       fetchEvents();
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       console.error('Error deleting event:', error);
+      setError(error.response?.data?.message || 'Failed to delete event');
     }
   };
 
   const handleLinkEvent = async (targetEventId: string) => {
     if (!selectedEvent) return;
     try {
-      await axios.post(`http://localhost:5001/api/events/${selectedEvent._id}/link`, {
+      await axios.post(`/api/events/${selectedEvent._id}/link`, {
         targetEventId,
+      }, {
+        headers: getAuthHeader()
       });
       setIsLinkDialogOpen(false);
       fetchEvents();
-    } catch (error) {
+      setError(null);
+    } catch (error: any) {
       console.error('Error linking events:', error);
+      setError(error.response?.data?.message || 'Failed to link events');
     }
   };
 
@@ -138,27 +168,36 @@ const EventManagement: React.FC = () => {
           <Button
             variant="contained"
             color="primary"
-            onClick={() => setIsCreateDialogOpen(true)}
+            onClick={() => {
+              setError(null);
+              setIsCreateDialogOpen(true);
+            }}
           >
             Create Event
           </Button>
         </Box>
       </Box>
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
         {events.map((event) => (
           <Box key={event._id} sx={{ width: { xs: '100%', sm: 'calc(50% - 12px)', md: 'calc(33.33% - 16px)' } }}>
             <EventCard
               event={event}
-              onEdit={(event) => {
+              onEdit={() => {
                 setSelectedEvent(event);
                 setIsEditDialogOpen(true);
               }}
-              onLink={(event) => {
+              onDelete={() => handleDeleteEvent(event._id)}
+              onLink={() => {
                 setSelectedEvent(event);
                 setIsLinkDialogOpen(true);
               }}
-              onDelete={handleDeleteEvent}
             />
           </Box>
         ))}
@@ -166,7 +205,10 @@ const EventManagement: React.FC = () => {
 
       <Dialog
         open={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
+        onClose={() => {
+          setError(null);
+          setIsCreateDialogOpen(false);
+        }}
         maxWidth="md"
         fullWidth
       >
@@ -174,26 +216,33 @@ const EventManagement: React.FC = () => {
         <DialogContent>
           <EventForm
             onSubmit={handleCreateEvent}
-            onCancel={() => setIsCreateDialogOpen(false)}
+            onCancel={() => {
+              setError(null);
+              setIsCreateDialogOpen(false);
+            }}
           />
         </DialogContent>
       </Dialog>
 
       <Dialog
         open={isEditDialogOpen}
-        onClose={() => setIsEditDialogOpen(false)}
+        onClose={() => {
+          setError(null);
+          setIsEditDialogOpen(false);
+        }}
         maxWidth="md"
         fullWidth
       >
         <DialogTitle>Edit Event</DialogTitle>
         <DialogContent>
-          {selectedEvent && (
-            <EventForm
-              initialData={convertEventToFormData(selectedEvent)}
-              onSubmit={handleEditEvent}
-              onCancel={() => setIsEditDialogOpen(false)}
-            />
-          )}
+          <EventForm
+            event={selectedEvent ? convertEventToFormData(selectedEvent) : undefined}
+            onSubmit={handleEditEvent}
+            onCancel={() => {
+              setError(null);
+              setIsEditDialogOpen(false);
+            }}
+          />
         </DialogContent>
       </Dialog>
 

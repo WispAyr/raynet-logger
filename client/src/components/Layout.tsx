@@ -8,14 +8,16 @@ import {
   Container,
   Box,
 } from '@mui/material';
-import { Logout as LogoutIcon } from '@mui/icons-material';
+import { Logout as LogoutIcon, Brightness4 as DarkModeIcon, Brightness7 as LightModeIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
+  onThemeToggle: () => void;
+  isDarkMode: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, onThemeToggle, isDarkMode }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -34,6 +36,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography variant="body1" sx={{ mr: 2 }}>
             {user?.callsign}
           </Typography>
+          <IconButton color="inherit" onClick={onThemeToggle}>
+            {isDarkMode ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
           <IconButton color="inherit" onClick={handleLogout}>
             <LogoutIcon />
           </IconButton>

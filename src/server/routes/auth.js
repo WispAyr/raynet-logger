@@ -36,19 +36,23 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { callsign, password } = req.body;
+    console.log(`[LOGIN] Attempt for callsign: ${callsign}`);
     
     // Find user
     const user = await User.findOne({ callsign });
     if (!user) {
+      console.log(`[LOGIN] User not found for callsign: ${callsign}`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      console.log(`[LOGIN] Password mismatch for callsign: ${callsign}`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    console.log(`[LOGIN] Success for callsign: ${callsign}`);
     // Generate token
     const token = jwt.sign(
       { userId: user._id },
@@ -58,6 +62,7 @@ router.post('/login', async (req, res) => {
 
     res.json({ user, token });
   } catch (error) {
+    console.error(`[LOGIN] Error for callsign: ${req.body.callsign}`, error);
     res.status(400).json({ message: error.message });
   }
 });

@@ -86,7 +86,8 @@ const EventMap: React.FC<EventMapProps> = ({
       <MapContainer
         center={config.center}
         zoom={config.zoom}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: '100%', width: '100%', minHeight: '400px' }}
+        scrollWheelZoom={true}
       >
         <TileLayer
           url={getTileLayer()}

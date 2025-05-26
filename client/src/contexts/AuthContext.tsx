@@ -25,8 +25,6 @@ export const useAuth = () => {
   return context;
 };
 
-const API_URL = 'http://localhost:5001/api';
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -43,12 +41,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await axios.get(`${API_URL}/auth/me`, {
+      const response = await axios.get('/api/auth/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUser(response.data);
       setIsAuthenticated(true);
     } catch (error) {
+      console.error('Auth check failed:', error);
       localStorage.removeItem('token');
       setUser(null);
       setIsAuthenticated(false);
@@ -57,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (callsign: string, password: string) => {
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      const response = await axios.post('/api/auth/login', {
         callsign,
         password
       });
@@ -66,13 +65,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(user);
       setIsAuthenticated(true);
     } catch (error) {
+      console.error('Login failed:', error);
       throw new Error('Invalid credentials');
     }
   };
 
   const register = async (callsign: string, password: string) => {
     try {
-      const response = await axios.post(`${API_URL}/auth/register`, {
+      const response = await axios.post('/api/auth/register', {
         callsign,
         password
       });
@@ -81,6 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(user);
       setIsAuthenticated(true);
     } catch (error) {
+      console.error('Registration failed:', error);
       throw new Error('Registration failed');
     }
   };
