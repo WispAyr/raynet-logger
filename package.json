@@ -1,0 +1,25 @@
+{
+  "name": "raynet-logger",
+  "version": "1.0.0",
+  "description": "RAYNET Event Logging System for radio communications",
+  "main": "src/server/index.js",
+  "scripts": {
+    "start": "node src/server/index.js",
+    "dev": "nodemon src/server/index.js",
+    "client": "cd client && npm start",
+    "dev:full": "concurrently \"npm run dev\" \"npm run client\""
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^8.1.0",
+    "socket.io": "^4.7.4",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3",
+    "concurrently": "^8.2.2"
+  }
+} 
